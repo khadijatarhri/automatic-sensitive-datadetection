@@ -1,6 +1,96 @@
-# Automatic Sensitive Data Detection
+# Plateforme de Détection Automatique de Données Sensibles et Gouvernance Intelligente des Métadonnées
 
-Application Django pour la détection et l'anonymisation automatique de données sensibles dans les fichiers CSV, utilisant **Presidio** et **spaCy**.
+## 📋 Table des Matières
+- [🎯 Vue d'ensemble](#-vue-densemble)
+- [🏗️ Architecture du Système](#️-architecture-du-système)
+- [🧩 Prérequis](#-prérequis)
+- [⚙️ Installation et Déploiement](#️-installation-et-déploiement)
+- [🔧 Configuration des Services Externes](#-configuration-des-services-externes)
+- [📥 Chargement des Données dans HDP Sandbox](#-chargement-des-données-dans-hdp-sandbox)
+- [🔄 Migration des Métadonnées vers Apache Atlas](#-migration-des-métadonnées-vers-apache-atlas)
+- [💻 Démonstration des Interfaces](#-démonstration-des-interfaces)
+- [🧠 Technologies Utilisées](#-technologies-utilisées)
+- [🤝 Contribution](#-contribution)
+
+---
+
+## 🎯 Vue d'ensemble
+
+Cette plateforme intégrée offre une solution complète pour la **détection automatique de données sensibles** conforme au **RGPD** et la **gouvernance intelligente des métadonnées**.  
+Le système combine plusieurs composants d’**intelligence artificielle** (*Microsoft Presidio*, *spaCy*, *Google Gemini*) avec des outils de **gouvernance d’entreprise** (*Apache Atlas*, *Apache Hive*) afin d’assurer une gestion optimale des données personnelles.
+
+### Fonctionnalités principales
+
+✅ Détection automatique d’entités **PII/SPI** avec reconnaissance d’entités marocaines spécifiques (*CIN, RIB, numéros de téléphone*)  
+✅ Double mode d’ingestion : **traitement par lots (CSV)** et **streaming temps réel (Apache Kafka)**  
+✅ **Recommandations intelligentes** générées par **IA (Google Gemini API)**  
+✅ **Workflows de validation** pour les *data stewards* avec interface intuitive  
+✅ **Synchronisation automatique** avec **Apache Atlas** pour création de glossaires métiers  
+✅ **Analyse de qualité des données** avec suggestions d’amélioration  
+✅ **Intégration avec Odoo ERP** pour surveillance continue de la conformité RGPD
+
+## 🏗️ Architecture du Système
+![Page de connexion](assets/login.png)
+
+## ⚙️ Workflow Général du Système
+
+Le système implémente un workflow en **quatre étapes principales** :
+
+### 🧩 Étape 1 : Ingestion des Données
+
+- **Upload CSV (Administrateur)** : Téléchargement manuel de fichiers CSV via l'interface Django, stockage dans **MongoDB GridFS**.  
+- **Streaming Temps Réel (Kafka)** : Flux continu de données clients depuis **Odoo ERP** via **Apache Kafka**.
+
+---
+
+### 🤖 Étape 2 : Analyse IA
+
+- **Microsoft Presidio** : Détection d'entités PII (*PERSON, EMAIL, PHONE, ID_MAROC, IBAN_CODE*, etc.)  
+- **spaCy NLP** : Analyse sémantique et classification contextuelle  
+- **Google Gemini API** : Génération de recommandations intelligentes (*COMPLIANCE, SECURITY, QUALITY, GOVERNANCE*)
+
+---
+
+### 👩‍💼 Étape 3 : Validation Humaine
+
+- Interface de révision des métadonnées enrichies par IA  
+- Validation, rejet ou modification des recommandations par les **data stewards**  
+- Gestion des annotations et contrôles qualité
+
+---
+
+### 🧭 Étape 4 : Gouvernance des Métadonnées
+
+- **Apache Hive** : Mapping des colonnes validées vers les structures de tables existantes  
+- **Apache Atlas** : Création automatique de glossaires métiers, termes, classifications RGPD  
+- **Hortonworks Data Platform (HDP)** : Intégration avec l’infrastructure de gouvernance d’entreprise
+
+---
+
+## 🔧 Prérequis
+
+### Logiciels requis
+- Docker (version 20.10+)
+- Docker Compose (version 1.29+)
+- Git
+- Python 3.8+
+
+### Services externes
+- **HDP Sandbox** : Environnement Hortonworks Data Platform avec Apache Atlas et Hive  
+- **Google Gemini API** : Clé API pour génération de recommandations intelligentes  
+- **MongoDB** : Base de données documentaire pour stockage des métadonnées  
+- **Apache Kafka** : Plateforme de streaming pour ingestion temps réel
+
+---
+
+## 🚀 Installation et Déploiement
+
+### 1️⃣ Cloner le dépôt principal
+```bash
+git clone https://github.com/khadijatarhri/Automatic-detection-of-sensitive-data-recommendation-engine-for-metadata-govnance.git
+cd Automatic-detection-of-sensitive-data-recommendation-engine-for-metadata-govnance.git
+```
+
 
 ---
 
