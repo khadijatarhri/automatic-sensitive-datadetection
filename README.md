@@ -29,7 +29,7 @@ Le système combine plusieurs composants d’**intelligence artificielle** (*Mic
 ✅ **Intégration avec Odoo ERP** pour surveillance continue de la conformité RGPD
 
 ## 🏗️ Architecture du Système
-![Page de connexion](assets/login.png)
+![Page de connexion](ArchitectureDeProjetDeStage.drawio.png)
 
 ## ⚙️ Workflow Général du Système
 
