@@ -8,7 +8,6 @@
 - [🔧 Configuration des Services Externes](#-configuration-des-services-externes)
 - [📥 Chargement des Données dans HDP Sandbox](#-chargement-des-données-dans-hdp-sandbox)
 - [🔄 Migration des Métadonnées vers Apache Atlas](#-migration-des-métadonnées-vers-apache-atlas)
-- [💻 Démonstration des Interfaces](#-démonstration-des-interfaces)
 - [🧠 Technologies Utilisées](#-technologies-utilisées)
 - [🤝 Contribution](#-contribution)
 
@@ -260,23 +259,7 @@ Cette commande :
  - Mappe les termes aux colonnes Hive correspondantes
  - Établit la traçabilité complète pour les audits de conformité
 
-# 🖥️ Démonstration des Interfaces
 
-Interface d’authentification
-
-Upload CSV
-
-Gestion des utilisateurs
-
-Sélection des entités détectées
-
-Recommandations IA – Conformité, Sécurité, Qualité, Gouvernance
-
-Interfaces Data Steward
-
-Intégration temps réel avec Odoo ERP
-
-Glossaires Apache Atlas
 
 # 🛠️ Technologies Utilisées
 
