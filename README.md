@@ -16,8 +16,8 @@ Application Django pour la détection et l'anonymisation automatique de données
 ### 1. Cloner le repository
 
 ```bash
-git clone https://github.com/khadijatarhri/automatic-Sensitive-Data-Detection.git  
-cd automatic-Sensitive-Data-Detection
+git clone https://github.com/khadijatarhri/Automatic-detection-of-sensitive-data-recommendation-engine-for-metadata-govnance.git  
+cd Automatic-detection-of-sensitive-data-recommendation-engine-for-metadata-govnance
 ```
 ### 2. Lancer l'application avec Docker
 ```bash
