@@ -91,6 +91,253 @@ git clone https://github.com/khadijatarhri/Automatic-detection-of-sensitive-data
 cd Automatic-detection-of-sensitive-data-recommendation-engine-for-metadata-govnance.git
 ```
 
+### 2️⃣ Configuration des variables d'environnement
+Créez un fichier .env à la racine du projet :
+```bash
+# Django Configuration
+DJANGO_SECRET_KEY=votre_clé_secrète_django
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+
+# MongoDB Configuration
+MONGO_HOST=mongodb
+MONGO_PORT=27017
+MONGO_DB_NAME=csv_anonymizer_db
+MONGO_METADATA_DB=metadata_validation_db
+
+# Google Gemini API
+GEMINI_API_KEY=votre_clé_api_gemini
+
+# Apache Atlas Configuration
+ATLAS_HOST=sandbox-hdp.hortonworks.com
+ATLAS_PORT=21000
+ATLAS_USERNAME=admin
+ATLAS_PASSWORD=admin
+
+# Kafka Configuration
+KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+KAFKA_TOPIC=odoo-customer-data
+```
+
+### 3️⃣ Construire et lancer les conteneurs
+```bash
+docker-compose up --build
+```
+Les services suivants seront démarrés :
+ - Django Web App : http://localhost:8000
+ - MongoDB : localhost:27017
+ - Kafka Consumer : Service en arrière-plan pour traitement des flux Odoo
+
+
+### 4️⃣ Créer un super utilisateur Django
+```bash
+docker exec -it django-web python manage.py createsuperuser
+```
+
+
+### 
+```bash
+```
+
+
+### Les services suivants seront démarrés :
+
+ - Django Web App : http://localhost:8000
+ - MongoDB : localhost:27017
+ - Kafka Consumer : Service en arrière-plan pour traitement des flux Odoo
+
+### 4️⃣ Créer un super utilisateur Django
+```bash
+docker exec -it django-web python manage.py createsuperuser
+```
+
+
+## ⚙️ Configuration des Services Externes : Apache Kafka et Odoo ERP
+
+Le système nécessite deux services externes hébergés dans des dépôts séparés :
+
+
+### 1. Kafka Orchestrator
+```bash
+git clone https://github.com/khadijatarhri/KafkaOrchestrator.git
+cd KafkaOrchestrator
+docker-compose up --build
+```
+
+Ce service démarre :
+ - Apache Kafka (broker et ZooKeeper)
+ - Kafka UI : http://localhost:8080
+
+### 2. Odoo Customer Module
+```bash
+git clone https://github.com/khadijatarhri/OdooCustomer.git
+cd OdooCustomer
+docker-compose up --build
+```
+Ce service démarre :
+ - Odoo ERP : http://localhost:8069
+ - PostgreSQL backend pour Odoo
+ - Producteur Kafka intégré pour publier les événements clients
+
+Configuration de connexion Odoo :
+ - Login : admin
+ - Mot de passe : admin
+
+# 🚀 Chargement des Données dans HDP Sandbox
+
+## 📋 Prérequis
+- Conteneur `sandbox-hdp` en fonctionnement  
+- Fichier CSV local à charger (ex: `entites_marocaines_diversifiees.csv`)
+
+---
+
+## ⚙️ Étapes
+
+### Étape 1 : Copier le fichier CSV dans le conteneur
+```bash
+docker cp /chemin/vers/votre/fichier.csv sandbox-hdp:/tmp/
+docker exec -it sandbox-hdp ls -l /tmp/fichier.csv
+```
+### Étape 2 : Se connecter au conteneur HDP
+```bash
+docker exec -it sandbox-hdp /bin/bash
+```
+
+### Étape 3 : Créer un répertoire HDFS et charger le fichier
+```bash
+sudo -u hdfs hdfs dfs -mkdir -p /user/khadija/entites_marocaines_diversifiees
+sudo -u hdfs hdfs dfs -put -f /tmp/fichier.csv /user/khadija/entites_marocaines_diversifiees/
+hdfs dfs -ls -h /user/khadija/entites_marocaines_diversifiees
+```
+
+### Étape 4 : Corriger les permissions pour Hive
+
+```bash
+sudo -u hdfs hdfs dfs -chown -R hive:hive /user/khadija/entites_marocaines_diversifiees
+```
+### Étape 5 : Créer la table Hive
+```bash
+beeline -u "jdbc:hive2://localhost:10000" -n hive
+
+DROP TABLE IF EXISTS entites_marocaines;
+
+CREATE EXTERNAL TABLE entites_marocaines (
+    text_id INT,
+    text STRING,
+    person STRING,
+    id_maroc STRING,
+    phone_number STRING,
+    email_address STRING,
+    iban_code STRING,
+    date_time STRING,
+    location STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE
+LOCATION '/user/khadija/entites_marocaines_diversifiees'
+TBLPROPERTIES ("skip.header.line.count"="1");
+```
+
+### Étape 6 : Vérifier la table
+
+```bash
+SHOW TABLES;
+SELECT * FROM entites_marocaines LIMIT 5;
+```
+
+# 🔄 Migration des Métadonnées vers Apache Atlas
+
+Une fois les métadonnées validées dans l'interface Django, lancez la synchronisation :
+
+```bash
+docker exec -it django-web python atlas_entity_migration.py
+```
+Cette commande :
+ - Crée automatiquement les glossaires RGPD
+ - Génère des termes de glossaire avec descriptions conformes
+ - Applique les classifications de sensibilité
+ - Mappe les termes aux colonnes Hive correspondantes
+ - Établit la traçabilité complète pour les audits de conformité
+
+# 🖥️ Démonstration des Interfaces
+
+Interface d’authentification
+
+Upload CSV
+
+Gestion des utilisateurs
+
+Sélection des entités détectées
+
+Recommandations IA – Conformité, Sécurité, Qualité, Gouvernance
+
+Interfaces Data Steward
+
+Intégration temps réel avec Odoo ERP
+
+Glossaires Apache Atlas
+
+# 🛠️ Technologies Utilisées
+
+## 🧩 Backend
+- **Django 4.2** – Framework web full-stack **Python**
+- **MongoDB** – Base de données **NoSQL documentaire**
+- **GridFS** – Stockage de fichiers volumineux
+
+---
+
+## 🤖 Intelligence Artificielle
+- **Microsoft Presidio** – Détection et anonymisation des **PII (informations personnelles)**
+- **spaCy** – Traitement du **langage naturel (NLP)**
+- **Google Gemini API** – Génération et recommandations basées sur l’**IA**
+
+---
+
+## 🏢 Gouvernance d’Entreprise
+- **Apache Atlas** – Gestion et classification des **métadonnées**
+- **Apache Hive** – Entrepôt de données analytique
+- **Apache Kafka** – Système de **streaming distribué**
+
+---
+
+## 🎨 Frontend
+- **HTML5 / CSS3 / JavaScript**
+- **Tailwind CSS** – Framework **utility-first**
+- **Django Templates** – Moteur de rendu côté serveur
+
+---
+
+## ⚙️ DevOps & Infrastructure
+- **Docker & Docker Compose** – Conteneurisation et orchestration
+- **Git & GitHub** – Gestion de versions et collaboration
+- **Playwright** – Tests **end-to-end** automatisés
+
+---
+
+## 🤝 Contribution
+Les contributions sont les bienvenues !
+
+1. Forkez le projet  
+2. Créez une branche :  
+   ```bash
+   git checkout -b feature/AmazingFeature
+  ```
+3.Committez vos changements (git commit -m 'Add some AmazingFeature')
+4.Pushez vers la branche (git push origin feature/AmazingFeature)
+5.Ouvrez une Pull Request
+
+## 📄 Licence
+
+Ce projet a été développé dans le cadre d’un stage au laboratoire ADMIR - ENSIAS.
+
+## 📧 Contact
+
+Pour toute question ou suggestion, n’hésitez pas à ouvrir une issue sur GitHub.
+
+Développé avec ❤️ au Laboratoire ADMIR - ENSIAS
+
+
 
 ---
 
