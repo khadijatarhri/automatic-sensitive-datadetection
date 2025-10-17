@@ -138,7 +138,7 @@ KAFKA_TOPIC=odoo-customer-data
 docker-compose up --build
 ```
 Les services suivants seront démarrés :
- - Django Web App : http://localhost:8000
+ - Django Web App : http://localhost:8000/login
  - MongoDB : localhost:27017
  - Kafka Consumer : Service en arrière-plan pour traitement des flux Odoo
 
@@ -156,7 +156,7 @@ docker exec -it django-web python manage.py createsuperuser
 
 ### Les services suivants seront démarrés :
 
- - Django Web App : http://localhost:8000
+ - Django Web App : http://localhost:8000/login
  - MongoDB : localhost:27017
  - Kafka Consumer : Service en arrière-plan pour traitement des flux Odoo
 
