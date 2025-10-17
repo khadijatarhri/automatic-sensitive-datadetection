@@ -306,9 +306,10 @@ Les contributions sont les bienvenues !
    ```bash
    git checkout -b feature/AmazingFeature
   ```
-3.Committez vos changements (git commit -m 'Add some AmazingFeature')
-4.Pushez vers la branche (git push origin feature/AmazingFeature)
-5.Ouvrez une Pull Request
+
+3. Committez vos changements (git commit -m 'Add some AmazingFeature')
+4. Pushez vers la branche (git push origin feature/AmazingFeature)
+5. Ouvrez une Pull Request
 
 ## 📄 Licence
 
