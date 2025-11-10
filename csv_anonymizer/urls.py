@@ -1,5 +1,5 @@
 from django.urls import path  
-from .views import UploadCSVView , DataStewardDashboardView, ProcessCSVView ,StatisticsView , RemoveDuplicatesView,  RemoveMissingValuesView # Ajoute cette importation  
+from .views import UploadCSVView ,DownloadCleanedFileView, DataStewardDashboardView, ProcessCSVView ,StatisticsView , RemoveDuplicatesView,  RemoveMissingValuesView # Ajoute cette importation  
   
 app_name = 'csv_anonymizer'  
   
@@ -10,6 +10,6 @@ urlpatterns = [
     path('remove-duplicates/', RemoveDuplicatesView.as_view(), name='remove_duplicates'),  
     path('remove-missing-values/', RemoveMissingValuesView.as_view(), name='remove_missing_values'), 
     path('datasteward-dashboard/', DataStewardDashboardView.as_view(), name='datasteward_dashboard'),
+    path('download/<str:job_id>/', DownloadCleanedFileView.as_view(), name='download_cleaned'),
 
- 
 ]

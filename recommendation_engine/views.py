@@ -611,17 +611,29 @@ class MetadataView(View):
             traceback.print_exc()
             return []
 
-    def _get_rgpd_category(self, detected_entities):
-        if any(entity in detected_entities for entity in ['PERSON', 'ID_MAROC']):
-            return "Données d'identification"
-        elif any(entity in detected_entities for entity in ['IBAN_CODE', 'CREDIT_CARD']):
-            return "Données financières"
-        elif any(entity in detected_entities for entity in ['PHONE_NUMBER', 'EMAIL_ADDRESS']):
-            return "Données de contact"
-        elif 'LOCATION' in detected_entities:
-            return "Données de localisation"
-        else:
-            return "Non défini"
+    def _get_rgpd_category(self, detected_entities):  
+     """  
+     Mapping RGPD aligné avec SemanticAnalyzer.  
+     Utilise le même dictionnaire que semantic_engine.py:132-140  
+     """  
+     # Mapping de référence (identique à semantic_engine.py)  
+     rgpd_mapping = {  
+        'PERSON': "Données d'identification",  
+        'ID_MAROC': "Données d'identification",  
+        'PHONE_NUMBER': 'Données de contact',  
+        'EMAIL_ADDRESS': 'Données de contact',  
+        'LOCATION': 'Données de localisation',  
+        'IBAN_CODE': 'Données financières',  
+        'CREDIT_CARD': 'Données financières',  
+        'DATE_TIME': 'Données temporelles'  
+     }  
+      
+    # Prendre la première entité détectée qui a un mapping  
+     for entity in detected_entities:  
+        if entity in rgpd_mapping:  
+            return rgpd_mapping[entity]  
+      
+     return "Non défini"
 
     def _get_sensitivity_level(self, detected_entities):
         if any(entity in detected_entities for entity in ['PERSON', 'ID_MAROC']):

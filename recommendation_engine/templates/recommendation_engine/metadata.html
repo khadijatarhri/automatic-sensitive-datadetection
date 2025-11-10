@@ -2,19 +2,43 @@
 <!DOCTYPE html>  
 <html lang="fr">  
 <head>  
-    
     <meta charset="UTF-8">  
     <meta name="viewport" content="width=device-width, initial-scale=1.0">  
     <title>Métadonnées Enrichies - Analyse Sémantique</title>  
     <link rel="stylesheet" href="{% static 'recommendation_engine/toast.css' %}"> 
     <script src="https://cdn.tailwindcss.com"></script>  
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">  
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* Style pour wrap des entités sur plusieurs lignes */
+        .entity-tags-wrapper {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            max-width: 250px; /* Largeur maximale avant retour à la ligne */
+        }
+        
+        .entity-tag {
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        
+        /* Empêcher le débordement des cellules */
+        td.entity-cell {
+            white-space: normal !important;
+            max-width: 300px;
+        }
+        
+        /* Style pour les échantillons */
+        .sample-values {
+            max-width: 200px;
+        }
+    </style>
 </head>  
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">  
     <nav class="bg-white shadow">    
         {% include 'csv_anonymizer/datasteward_navigation.html' %}
-
     </nav>       
+    
     <div class="container mx-auto px-4 py-8 mt-20">  
         <!-- Header -->  
         <div class="text-center mb-12">  
@@ -43,10 +67,10 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom de Colonne</th>  
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Types d'Entités</th>  
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Échantillons</th>  
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Entités</th>  
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie RGPD Recommandée</th>  
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Niveau de Sensibilité</th>  
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Politique Ranger</th>                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Validation</th>  
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Politique Ranger</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Validation</th>  
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>  
                         </tr>  
                     </thead>  
@@ -56,39 +80,49 @@
                             <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900">  
                                 {{ column.column_name }}  
                             </td>  
-                            <td class="px-6 py-4 whitespace-nowrap">  
-                                {% for entity_type in column.entity_types %}  
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-1 mb-1">  
-                                        {{ entity_type }}  
-                                    </span>  
-                                {% endfor %}  
+                            
+                            <!-- Cellule avec wrap pour les entités -->
+                            <td class="px-6 py-4 entity-cell">  
+                                <div class="entity-tags-wrapper">
+                                    {% for entity_type in column.entity_types %}  
+                                        <span class="entity-tag inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">  
+                                            {{ entity_type }}  
+                                        </span>  
+                                    {% endfor %}
+                                </div>
                             </td>  
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">  
-                                {% for sample in column.sample_values|slice:":3" %}  
-                                    <div class="text-xs text-gray-600">{{ sample|truncatechars:20 }}</div>  
-                                {% endfor %}  
-                                {% if column.sample_values|length > 3 %}  
-                                    <div class="text-xs text-gray-400">... et {{ column.sample_values|length|add:"-3" }} autres</div>  
-                                {% endif %}  
+                            
+                            <td class="px-6 py-4 text-sm text-gray-900">  
+                                <div class="sample-values">
+                                    {% for sample in column.sample_values|slice:":3" %}  
+                                        <div class="text-xs text-gray-600 truncate">{{ sample|truncatechars:30 }}</div>  
+                                    {% endfor %}  
+                                    {% if column.sample_values|length > 3 %}  
+                                        <div class="text-xs text-gray-400">... et {{ column.sample_values|length|add:"-3" }} autres</div>  
+                                    {% endif %}
+                                </div>
                             </td>  
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">  
-                                {{ column.total_entities }}  
-                            </td>  
+                            
+                            
+                            
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">  
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">  
                                     {{ column.recommended_rgpd_category|default:"Non défini" }}  
                                 </span>  
                             </td>  
+                            
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">  
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">  
                                     {{ column.recommended_sensitivity_level|default:"Non défini" }}  
                                 </span>  
                             </td>  
+                            
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">  
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">  
                                     {{ column.recommended_ranger_policy|default:"Non défini" }}  
                                 </span>  
                             </td>
+                            
                             <td class="px-6 py-4 whitespace-nowrap">  
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium   
                                       {% if column.validation_status == 'validated' %}bg-green-100 text-green-800  
@@ -100,8 +134,10 @@
                                     {% else %}En attente{% endif %}  
                                 </span>  
                             </td>
+                            
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">  
-                                <button onclick="openColumnValidationModal('{{ column.column_name|escapejs }}', {{ column.entity_types|safe }}, '{{ column.recommended_rgpd_category|default:""|escapejs }}', '{{ column.recommended_sensitivity_level|default:""|escapejs }}', '{{ column.recommended_ranger_policy|default:""|escapejs }}')" class="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">  
+                                <button onclick="openColumnValidationModal('{{ column.column_name|escapejs }}', {{ column.entity_types|safe }}, '{{ column.recommended_rgpd_category|default:""|escapejs }}', '{{ column.recommended_sensitivity_level|default:""|escapejs }}', '{{ column.recommended_ranger_policy|default:""|escapejs }}')" 
+                                        class="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">  
                                     <i class="fas fa-edit mr-1"></i>Annoter Colonne  
                                 </button> 
                             </td>  
@@ -111,261 +147,255 @@
                 </table>  
             </div>  
         </div>  
-  
-
-                                                       
-        
     </div>  
 
-       <!-- Modal d'annotation de colonne -->    
-  <div id="columnValidationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">    
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center">    
-        <div class="bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">    
-            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">    
-                <div class="sm:flex sm:items-start">    
-                    <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">    
-                        <i class="fas fa-columns text-blue-600"></i>    
-                    </div>    
-                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">    
-                        <h3 class="text-lg leading-6 font-medium text-gray-900">    
-                            Annotation de la colonne    
-                        </h3>    
-                        <div class="mt-4">    
-                            <p class="text-sm text-gray-500 mb-4">    
-                                <strong>Colonne:</strong> <span id="modalColumnName"></span><br>    
-                                <strong>Types d'entités:</strong> <span id="modalEntityTypes"></span>    
-                            </p>    
-                                
-                            <div class="mb-4">    
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Type d'entité principal</label>    
-                                <select id="columnEntityType" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">    
-                                    <!-- Options dynamiques -->    
-                                </select>    
-                            </div>    
-                                
-                            <div class="mb-4">    
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Statut de validation</label>    
-                                <select id="columnValidationStatus" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">    
-                                    <option value="validated">Validé</option>    
-                                    <option value="rejected">Rejeté</option>    
-                                    <option value="pending">En attente</option>    
-                                </select>    
-                            </div>    
-                                
-                            <div class="mb-4">    
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie RGPD</label>    
-                                <select id="columnRgpdCategory" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">    
-                                    <option value="Données d'identification">Données d'identification</option>    
-                                    <option value="Données financières">Données financières</option>    
-                                    <option value="Données de contact">Données de contact</option>    
-                                    <option value="Données de localisation">Données de localisation</option>    
-                                </select>    
-                            </div>    
-                                
-                            <div class="mb-4">  
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Niveau de sensibilité</label>  
-                                <select id="columnSensitivityLevel" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">  
-                                    <option value="PUBLIC">Public</option>  
-                                    <option value="INTERNAL">Interne</option>  
-                                    <option value="CONFIDENTIAL">Confidentiel</option>  
-                                    <option value="RESTRICTED">Restreint</option>  
-                                    <option value="PERSONAL_DATA">Données personnelles</option>  
-                                </select>  
-                            </div>  
-                              
-                            <div class="mb-4">  
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Politique Ranger</label>  
-                                <select id="columnAnonymizationMethod" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">  
-                                    <option value="ranger_masking_policy_person">Masquage Ranger (exemple: Personne)</option>  
-                                    <option value="ranger_hashing_policy_id">Hachage Ranger (exemple:ID)</option>  
-                                    <option value="ranger_partial_masking_policy_phone">Masquage partiel (exemple:Téléphone)</option>  
-                                    <option value="ranger_encryption_policy_financial">Chiffrement (exemple:Financier) </option>  
-                                </select>  
-                            </div>
-                                
-                            <div class="mb-4">    
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Commentaires</label>    
-                                <textarea id="columnAnnotationComments" rows="3"     
-                                         class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"    
-                                         placeholder="Commentaires sur la validation de cette colonne..."></textarea>    
+    <!-- Modal d'annotation de colonne -->    
+    <div id="columnValidationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">    
+        <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center">    
+            <div class="bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">    
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">    
+                    <div class="sm:flex sm:items-start">    
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">    
+                            <i class="fas fa-columns text-blue-600"></i>    
+                        </div>    
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">    
+                            <h3 class="text-lg leading-6 font-medium text-gray-900">    
+                                Annotation de la colonne    
+                            </h3>    
+                            <div class="mt-4">    
+                                <p class="text-sm text-gray-500 mb-4">    
+                                    <strong>Colonne:</strong> <span id="modalColumnName"></span><br>    
+                                    <strong>Types d'entités:</strong> <span id="modalEntityTypes"></span>    
+                                </p>    
+                                    
+                                <div class="mb-4">    
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Type d'entité principal</label>    
+                                    <select id="columnEntityType" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">    
+                                        <!-- Options dynamiques -->    
+                                    </select>    
+                                </div>    
+                                    
+                                <div class="mb-4">    
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Statut de validation</label>    
+                                    <select id="columnValidationStatus" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">    
+                                        <option value="validated">Validé</option>    
+                                        <option value="rejected">Rejeté</option>    
+                                        <option value="pending">En attente</option>    
+                                    </select>    
+                                </div>    
+                                    
+                                <div class="mb-4">    
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie RGPD</label>    
+                                    <select id="columnRgpdCategory" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">    
+                                        <option value="Données d'identification">Données d'identification</option>    
+                                        <option value="Données financières">Données financières</option>    
+                                        <option value="Données de contact">Données de contact</option>    
+                                        <option value="Données de localisation">Données de localisation</option>    
+                                    </select>    
+                                </div>    
+                                    
+                                <div class="mb-4">  
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Niveau de sensibilité</label>  
+                                    <select id="columnSensitivityLevel" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">  
+                                        <option value="PUBLIC">Public</option>  
+                                        <option value="INTERNAL">Interne</option>  
+                                        <option value="CONFIDENTIAL">Confidentiel</option>  
+                                        <option value="RESTRICTED">Restreint</option>  
+                                        <option value="PERSONAL_DATA">Données personnelles</option>  
+                                    </select>  
+                                </div>  
+                                  
+                                <div class="mb-4">  
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Politique Ranger</label>  
+                                    <select id="columnAnonymizationMethod" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">  
+                                        <option value="ranger_masking_policy_person">Masquage Ranger (exemple: Personne)</option>  
+                                        <option value="ranger_hashing_policy_id">Hachage Ranger (exemple:ID)</option>  
+                                        <option value="ranger_partial_masking_policy_phone">Masquage partiel (exemple:Téléphone)</option>  
+                                        <option value="ranger_encryption_policy_financial">Chiffrement (exemple:Financier) </option>  
+                                    </select>  
+                                </div>
+                                    
+                                <div class="mb-4">    
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Commentaires</label>    
+                                    <textarea id="columnAnnotationComments" rows="3"     
+                                             class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"    
+                                             placeholder="Commentaires sur la validation de cette colonne..."></textarea>    
+                                </div>    
                             </div>    
                         </div>    
                     </div>    
                 </div>    
-            </div>    
-            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">    
-                <button onclick="saveColumnAnnotation()"     
-                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">    
-                    <i class="fas fa-save mr-2"></i>  
-                    Sauvegarder  
-                </button>  
-                <button onclick="closeColumnValidationModal()"     
-                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">    
-                    <i class="fas fa-times mr-2"></i>  
-                    Annuler  
-                </button>  
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">    
+                    <button onclick="saveColumnAnnotation()"     
+                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">    
+                        <i class="fas fa-save mr-2"></i>  
+                        Sauvegarder  
+                    </button>  
+                    <button onclick="closeColumnValidationModal()"     
+                            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">    
+                        <i class="fas fa-times mr-2"></i>  
+                        Annuler  
+                    </button>  
+                </div>    
             </div>    
         </div>    
-    </div>    
-  </div>
-  <script>  
-    let currentColumnName = null;  
-    let currentAiRecommendations = {};
-      
-    function openColumnValidationModal(columnName, entityTypes, rgpdCategory, sensitivityLevel, rangerPolicy) {  
-        currentColumnName = columnName;
-        currentAiRecommendations = {
-            rgpd_category: rgpdCategory,
-            sensitivity_level: sensitivityLevel,
-            ranger_policy: rangerPolicy
-        };
-        
-        document.getElementById('modalColumnName').textContent = columnName;  
-        document.getElementById('modalEntityTypes').textContent = Array.from(entityTypes).join(', ');  
+    </div>
+
+    <script>  
+        let currentColumnName = null;  
+        let currentAiRecommendations = {};
           
-        // Remplir le select des types d'entités  
-        const entityTypeSelect = document.getElementById('columnEntityType');  
-        entityTypeSelect.innerHTML = '';  
-        Array.from(entityTypes).forEach(type => {  
-            const option = document.createElement('option');  
-            option.value = type;  
-            option.textContent = type;  
-            entityTypeSelect.appendChild(option);  
-        });  
-          
-        // Pré-remplir avec les recommandations IA si disponibles  
-        if (currentAiRecommendations.rgpd_category) {  
-            document.getElementById('columnRgpdCategory').value = currentAiRecommendations.rgpd_category;  
-        }  
-          
-        if (currentAiRecommendations.sensitivity_level) {  
-            document.getElementById('columnSensitivityLevel').value = currentAiRecommendations.sensitivity_level;  
-        }  
-          
-        if (currentAiRecommendations.ranger_policy) {  
-            document.getElementById('columnAnonymizationMethod').value = currentAiRecommendations.ranger_policy;  
+        function openColumnValidationModal(columnName, entityTypes, rgpdCategory, sensitivityLevel, rangerPolicy) {  
+            currentColumnName = columnName;
+            currentAiRecommendations = {
+                rgpd_category: rgpdCategory,
+                sensitivity_level: sensitivityLevel,
+                ranger_policy: rangerPolicy
+            };
+            
+            document.getElementById('modalColumnName').textContent = columnName;  
+            document.getElementById('modalEntityTypes').textContent = Array.from(entityTypes).join(', ');  
+              
+            // Remplir le select des types d'entités  
+            const entityTypeSelect = document.getElementById('columnEntityType');  
+            entityTypeSelect.innerHTML = '';  
+            Array.from(entityTypes).forEach(type => {  
+                const option = document.createElement('option');  
+                option.value = type;  
+                option.textContent = type;  
+                entityTypeSelect.appendChild(option);  
+            });  
+              
+            // Pré-remplir avec les recommandations IA si disponibles  
+            if (currentAiRecommendations.rgpd_category) {  
+                document.getElementById('columnRgpdCategory').value = currentAiRecommendations.rgpd_category;  
+            }  
+              
+            if (currentAiRecommendations.sensitivity_level) {  
+                document.getElementById('columnSensitivityLevel').value = currentAiRecommendations.sensitivity_level;  
+            }  
+              
+            if (currentAiRecommendations.ranger_policy) {  
+                document.getElementById('columnAnonymizationMethod').value = currentAiRecommendations.ranger_policy;  
+            }
+              
+            document.getElementById('columnValidationModal').classList.remove('hidden');  
         }
           
-        document.getElementById('columnValidationModal').classList.remove('hidden');  
-    }
-      
-    function closeColumnValidationModal() {  
-        document.getElementById('columnValidationModal').classList.add('hidden');  
-        currentColumnName = null;
-        currentAiRecommendations = {};  
-    }  
-      
- 
-    function saveColumnAnnotation() {  
-        console.log("=== DEBUG SAUVEGARDE ===");  
-        console.log("currentColumnName:", currentColumnName);  
+        function closeColumnValidationModal() {  
+            document.getElementById('columnValidationModal').classList.add('hidden');  
+            currentColumnName = null;
+            currentAiRecommendations = {};  
+        }  
           
-        // Vérifier que tous les éléments existent  
-        const elements = {  
-            entityType: document.getElementById('columnEntityType'),  
-            status: document.getElementById('columnValidationStatus'),  
-            rgpdCategory: document.getElementById('columnRgpdCategory'),  
-            sensitivityLevel: document.getElementById('columnSensitivityLevel'),
-            anonymizationMethod: document.getElementById('columnAnonymizationMethod'),  
-            comments: document.getElementById('columnAnnotationComments')  
-        };  
-          
-        // Vérifier chaque élément  
-        for (const [name, element] of Object.entries(elements)) {  
-            if (!element) {  
-                console.error(`Élément manquant: ${name}`);  
-                alert(`Erreur: élément ${name} non trouvé`);  
+        function saveColumnAnnotation() {  
+            console.log("=== DEBUG SAUVEGARDE ===");  
+            console.log("currentColumnName:", currentColumnName);  
+              
+            // Vérifier que tous les éléments existent  
+            const elements = {  
+                entityType: document.getElementById('columnEntityType'),  
+                status: document.getElementById('columnValidationStatus'),  
+                rgpdCategory: document.getElementById('columnRgpdCategory'),  
+                sensitivityLevel: document.getElementById('columnSensitivityLevel'),
+                anonymizationMethod: document.getElementById('columnAnonymizationMethod'),  
+                comments: document.getElementById('columnAnnotationComments')  
+            };  
+              
+            // Vérifier chaque élément  
+            for (const [name, element] of Object.entries(elements)) {  
+                if (!element) {  
+                    console.error(`Élément manquant: ${name}`);  
+                    alert(`Erreur: élément ${name} non trouvé`);  
+                    return;  
+                }  
+            }  
+              
+            if (!currentColumnName) {  
+                console.error("currentColumnName est null ou undefined");  
+                alert("Erreur: nom de colonne non défini");  
                 return;  
             }  
-        }  
-          
-        if (!currentColumnName) {  
-            console.error("currentColumnName est null ou undefined");  
-            alert("Erreur: nom de colonne non défini");  
-            return;  
-        }  
-          
-        const entityType = elements.entityType.value;  
-        const status = elements.status.value;  
-        const rgpdCategory = elements.rgpdCategory.value; 
-        const sensitivityLevel = elements.sensitivityLevel.value; 
-        const anonymizationMethod = elements.anonymizationMethod.value;  
-        const comments = elements.comments.value;  
-          
-        console.log("Données à envoyer:", {  
-            entity_type: entityType,  
-            validation_status: status,  
-            rgpd_category: rgpdCategory,
-            sensitivity_level: sensitivityLevel,  
-            anonymization_method: anonymizationMethod,  
-            annotation_comments: comments  
-        });  
-          
-        const url = `/recommendations/column-validation/{{ job_id }}/${currentColumnName}/`;  
-        console.log("URL de la requête:", url);  
-          
-        fetch(url, {  
-            method: 'POST',  
-            headers: {  
-                'Content-Type': 'application/json',  
-                'X-CSRFToken': '{{ csrf_token }}'  
-            },  
-            body: JSON.stringify({  
+              
+            const entityType = elements.entityType.value;  
+            const status = elements.status.value;  
+            const rgpdCategory = elements.rgpdCategory.value; 
+            const sensitivityLevel = elements.sensitivityLevel.value; 
+            const anonymizationMethod = elements.anonymizationMethod.value;  
+            const comments = elements.comments.value;  
+              
+            console.log("Données à envoyer:", {  
                 entity_type: entityType,  
                 validation_status: status,  
                 rgpd_category: rgpdCategory,
                 sensitivity_level: sensitivityLevel,  
                 anonymization_method: anonymizationMethod,  
                 annotation_comments: comments  
-            })  
-        }).then(response => {  
-            console.log("Réponse reçue:", response.status);  
-            return response.json();  
-        }).then(data => {  
-            console.log("Données de réponse:", data);  
-            if (data.success) {  
-                alert("Sauvegarde réussie!");  
+            });  
+              
+            const url = `/recommendations/column-validation/{{ job_id }}/${currentColumnName}/`;  
+            console.log("URL de la requête:", url);  
+              
+            fetch(url, {  
+                method: 'POST',  
+                headers: {  
+                    'Content-Type': 'application/json',  
+                    'X-CSRFToken': '{{ csrf_token }}'  
+                },  
+                body: JSON.stringify({  
+                    entity_type: entityType,  
+                    validation_status: status,  
+                    rgpd_category: rgpdCategory,
+                    sensitivity_level: sensitivityLevel,  
+                    anonymization_method: anonymizationMethod,  
+                    annotation_comments: comments  
+                })  
+            }).then(response => {  
+                console.log("Réponse reçue:", response.status);  
+                return response.json();  
+            }).then(data => {  
+                console.log("Données de réponse:", data);  
+                if (data.success) {  
+                    alert("Sauvegarde réussie!");  
+                    closeColumnValidationModal();  
+                    location.reload();  
+                } else {  
+                    alert("Erreur: " + (data.error || 'Erreur inconnue'));  
+                }  
+            }).catch(error => {  
+                console.error("Erreur fetch:", error);  
+                alert("Erreur de connexion: " + error.message);  
+            });  
+        }
+      
+        function showNotification(message, type) {  
+            // Créer l'élément de notification  
+            const notification = document.createElement('div');  
+            notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm ${  
+                type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'  
+            }`;  
+            notification.innerHTML = `  
+                <div class="flex items-center">  
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} mr-2"></i>  
+                    <span>${message}</span>  
+                </div>  
+            `;  
+              
+            document.body.appendChild(notification);  
+              
+            // Supprimer après 3 secondes  
+            setTimeout(() => {  
+                notification.remove();  
+            }, 3000);  
+        }
+        
+        // Fermer le modal en cliquant à l'extérieur  
+        window.onclick = function(event) {  
+            const modal = document.getElementById('columnValidationModal');  
+            if (event.target === modal) {  
                 closeColumnValidationModal();  
-                location.reload();  
-            } else {  
-                alert("Erreur: " + (data.error || 'Erreur inconnue'));  
             }  
-        }).catch(error => {  
-            console.error("Erreur fetch:", error);  
-            alert("Erreur de connexion: " + error.message);  
-        });  
-    }
-  
-    function showNotification(message, type) {  
-        // Créer l'élément de notification  
-        const notification = document.createElement('div');  
-        notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm ${  
-            type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'  
-        }`;  
-        notification.innerHTML = `  
-            <div class="flex items-center">  
-                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} mr-2"></i>  
-                <span>${message}</span>  
-            </div>  
-        `;  
-          
-        document.body.appendChild(notification);  
-          
-        // Supprimer après 3 secondes  
-        setTimeout(() => {  
-            notification.remove();  
-        }, 3000);  
-    }
-    
-    // Fermer le modal en cliquant à l'extérieur  
-    window.onclick = function(event) {  
-        const modal = document.getElementById('columnValidationModal');  
-        if (event.target === modal) {  
-            closeColumnValidationModal();  
         }  
-    }  
     </script>
-
-
 </body>  
 </html>

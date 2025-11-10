@@ -166,164 +166,187 @@
     </style>  
   
     <script>  
-    function toggleCard(checkboxId) {  
-        const checkbox = document.getElementById(checkboxId);  
-        const card = checkbox.closest('.cleaning-card');  
-          
-        checkbox.checked = !checkbox.checked;  
-          
-        if (checkbox.checked) {  
-            card.classList.add('selected');  
-        } else {  
-            card.classList.remove('selected');  
-        }  
-    }  
-  
-    function applySelectedCleaningActions() {  
-        const selectedActions = [];  
-          
-        if (document.getElementById('removeDuplicates').checked) {  
-            selectedActions.push('remove_duplicates');  
-        }  
-        if (document.getElementById('removeMissingValues').checked) {  
-            selectedActions.push('remove_missing_values');  
-        }  
-        if (document.getElementById('fixInconsistencies').checked) {  
-            selectedActions.push('fix_inconsistencies');  
-        }  
-          
-        if (selectedActions.length === 0) {  
-            showErrorMessage('Veuillez sélectionner au moins une action de nettoyage');  
-            return;  
-        }  
-          
-        showLoadingIndicator('Application des corrections en cours...');  
-          
-        const formData = new FormData();  
-        formData.append('action', 'batch_cleaning');  
-        formData.append('selected_actions', JSON.stringify(selectedActions));  
-          
-        fetch(`/recommendations/data-quality/{{ job_id }}/`, {  
-            method: 'POST',  
-            headers: {  
-                'X-CSRFToken': getCookie('csrftoken')  
-            },  
-            body: formData  
-        })  
-        .then(response => {  
-            if (!response.ok) {  
-                throw new Error(`Erreur HTTP: ${response.status}`);  
-            }  
-            return response.json();  
-        })  
-        .then(data => {  
-            hideLoadingIndicator();  
-            if (data.success) {  
-                showSuccessMessage(`Nettoyage terminé ! ${data.total_changes} modifications appliquées`);  
-                  
-                // Téléchargement automatique unique du fichier final  
-                downloadProcessedFile('{{ job_id }}', 'cleaned');  
-                  
-                setTimeout(() => {  
-                    window.location.reload();  
-                }, 3000);  
-            } else {  
-                showErrorMessage(data.error || 'Erreur lors du nettoyage');  
-            }  
-        })  
-        .catch(error => {  
-            hideLoadingIndicator();  
-            showErrorMessage(error.message || 'Erreur de connexion');  
-        });  
-    }  
-  
-    // Fonction pour télécharger automatiquement le fichier traité  
-    function downloadProcessedFile(jobId, actionType) {  
-        // Créer un lien de téléchargement invisible  
-        const downloadLink = document.createElement('a');  
-        downloadLink.href = `/download/${jobId}/`;  
-        downloadLink.download = `processed_file_${actionType}_${jobId}.csv`;  
-        downloadLink.style.display = 'none';  
-          
-        // Ajouter au DOM, cliquer, puis supprimer  
-        document.body.appendChild(downloadLink);  
-        downloadLink.click();  
-        document.body.removeChild(downloadLink);  
-          
-        showSuccessMessage('Téléchargement du fichier traité en cours...');  
-    }  
-  
-    // Fonctions utilitaires  
-    function getCookie(name) {  
-        let cookieValue = null;  
-        if (document.cookie && document.cookie !== '') {  
-            const cookies = document.cookie.split(';');  
-            for (let i = 0; i < cookies.length; i++) {  
-                const cookie = cookies[i].trim();  
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {  
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));  
-                    break;  
-                }  
-            }  
-        }  
-        return cookieValue;  
-    }  
-  
-    function showLoadingIndicator(message) {  
-        const loader = document.createElement('div');  
-        loader.id = 'loadingIndicator';  
-        loader.className = 'fixed inset-0 bg-slate-900 bg-opacity-50 z-50 flex items-center justify-center';  
-        loader.innerHTML = `  
-            <div class="bg-white rounded-xl p-6 flex items-center shadow-2xl">  
-                <i class="fas fa-spinner fa-spin text-blue-500 text-2xl mr-3"></i>  
-                <span class="text-slate-700 font-medium">${message}</span>  
-            </div>  
-        `;  
-        document.body.appendChild(loader);  
-    }  
-    function hideLoadingIndicator() {  
-        const loader = document.getElementById('loadingIndicator');  
-        if (loader) {  
-            loader.remove();  
-        }  
-    }  
-  
-    function showSuccessMessage(message) {  
-        showToast(message, 'success');  
-    }  
-  
-    function showErrorMessage(message) {  
-        showToast(message, 'error');  
-    }  
-  
-    function showToast(message, type) {  
-        const toast = document.createElement('div');  
-        toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-xl text-white shadow-lg transform transition-all duration-300 ${  
-            type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'  
-        }`;  
-        toast.innerHTML = `  
-            <div class="flex items-center">  
-                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} mr-2"></i>  
-                <span class="font-medium">${message}</span>  
-            </div>  
-        `;  
-        document.body.appendChild(toast);  
-  
-        // Animation d'entrée  
-        setTimeout(() => {  
-            toast.style.transform = 'translateX(0)';  
-            toast.style.opacity = '1';  
-        }, 100);  
-  
-        // Suppression après 3 secondes  
-        setTimeout(() => {  
-            toast.style.transform = 'translateX(100%)';  
-            toast.style.opacity = '0';  
-            setTimeout(() => {  
-                toast.remove();  
-            }, 300);  
-        }, 3000);  
-    }  
+// Remplacez TOUT le <script> dans votre template data_quality.html par ceci
+
+    function toggleCard(checkboxId) {
+    const checkbox = document.getElementById(checkboxId);
+    const card = checkbox.closest('.cleaning-card');
+    
+    checkbox.checked = !checkbox.checked;
+    
+    if (checkbox.checked) {
+        card.classList.add('selected');
+    } else {
+        card.classList.remove('selected');
+    }
+}
+
+function applySelectedCleaningActions() {
+    const selectedActions = [];
+    
+    if (document.getElementById('removeDuplicates').checked) {
+        selectedActions.push('remove_duplicates');
+    }
+    if (document.getElementById('removeMissingValues').checked) {
+        selectedActions.push('remove_missing_values');
+    }
+    if (document.getElementById('fixInconsistencies').checked) {
+        selectedActions.push('fix_inconsistencies');
+    }
+    
+    if (selectedActions.length === 0) {
+        showErrorMessage('Veuillez sélectionner au moins une action de nettoyage');
+        return;
+    }
+    
+    showLoadingIndicator('Application des corrections en cours...');
+    
+    const formData = new FormData();
+    formData.append('action', 'batch_cleaning');
+    formData.append('selected_actions', JSON.stringify(selectedActions));
+    
+    fetch(`/recommendations/data-quality/{{ job_id }}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Erreur HTTP: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        hideLoadingIndicator();
+        if (data.success) {
+            showSuccessMessage(`Nettoyage terminé ! ${data.total_changes} modifications appliquées`);
+            
+            // ✅ CORRECTION: Attendre 1 seconde avant le téléchargement
+            setTimeout(() => {
+                downloadProcessedFile('{{ job_id }}');
+            }, 1000);
+            
+            // Recharger la page après 3 secondes
+            setTimeout(() => {
+                window.location.reload();
+            }, 3000);
+        } else {
+            showErrorMessage(data.error || 'Erreur lors du nettoyage');
+        }
+    })
+    .catch(error => {
+        hideLoadingIndicator();
+        showErrorMessage(error.message || 'Erreur de connexion');
+        console.error('Erreur complète:', error);
+    });
+}
+
+// ✅ FONCTION CORRIGÉE DE TÉLÉCHARGEMENT
+function downloadProcessedFile(jobId) {
+    console.log('🔽 Début téléchargement pour job:', jobId);
+    
+    // Méthode 1: Ouvrir dans une nouvelle fenêtre (plus fiable)
+    const downloadUrl = `/csv/download/${jobId}/`;
+    console.log('URL de téléchargement:', downloadUrl);
+    
+    // Créer un iframe invisible pour le téléchargement
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = downloadUrl;
+    
+    // Ajouter au DOM
+    document.body.appendChild(iframe);
+    
+    // Supprimer l'iframe après 5 secondes
+    setTimeout(() => {
+        document.body.removeChild(iframe);
+        console.log('✅ Iframe de téléchargement supprimé');
+    }, 5000);
+    
+    showSuccessMessage('Téléchargement du fichier nettoyé démarré...');
+}
+
+// Fonctions utilitaires
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function showLoadingIndicator(message) {
+    const loader = document.createElement('div');
+    loader.id = 'loadingIndicator';
+    loader.className = 'fixed inset-0 bg-slate-900 bg-opacity-50 z-50 flex items-center justify-center';
+    loader.innerHTML = `
+        <div class="bg-white rounded-xl p-6 flex items-center shadow-2xl">
+            <i class="fas fa-spinner fa-spin text-blue-500 text-2xl mr-3"></i>
+            <span class="text-slate-700 font-medium">${message}</span>
+        </div>
+    `;
+    document.body.appendChild(loader);
+}
+
+function hideLoadingIndicator() {
+    const loader = document.getElementById('loadingIndicator');
+    if (loader) {
+        loader.remove();
+    }
+}
+
+function showSuccessMessage(message) {
+    showToast(message, 'success');
+}
+
+function showErrorMessage(message) {
+    showToast(message, 'error');
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-xl text-white shadow-lg transform transition-all duration-300 ${
+        type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
+    }`;
+    toast.innerHTML = `
+        <div class="flex items-center">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} mr-2"></i>
+            <span class="font-medium">${message}</span>
+        </div>
+    `;
+    document.body.appendChild(toast);
+
+    // Animation d'entrée
+    setTimeout(() => {
+        toast.style.transform = 'translateX(0)';
+        toast.style.opacity = '1';
+    }, 100);
+
+    // Suppression après 3 secondes
+    setTimeout(() => {
+        toast.style.transform = 'translateX(100%)';
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 3000);
+}
+
+// ✅ AJOUT: Logs de debug au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('✅ Page data_quality chargée');
+    console.log('Job ID:', '{{ job_id }}');
+    console.log('URL de téléchargement:', `/csv/download/{{ job_id }}/`);
+});
 </script>  
 </body>  
 </html>

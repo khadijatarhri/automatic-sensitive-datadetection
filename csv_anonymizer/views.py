@@ -11,10 +11,13 @@ import csv
 import asyncio  
 import io    
 import traceback    
+from .quality_analyzer import DataQualityAnalyzer
 import json       
 import google.generativeai as genai
 import psutil
-
+import re
+from multiprocessing import Pool, cpu_count
+import numpy as np
 from db_connections import db as main_db          
 import datetime          
 from bson import ObjectId        
@@ -56,176 +59,250 @@ class UploadCSVView(View):
           
         return render(request, 'csv_anonymizer/upload.html')  
   
- def post(self, request):    
-    # Vérifications d'authentification existantes    
-    print("=== DÉBUT UPLOAD CSV ===")    
-    user_email = request.session.get("user_email")    
-    print(f"User email: {user_email}")    
+ def post(self, request):
+    """Upload CSV avec analyse de qualité complète"""
+    print("=== DÉBUT UPLOAD CSV AVEC ANALYSE QUALITÉ ===")
+    user_email = request.session.get("user_email")
+    print(f"User email: {user_email}")
+    
+    # ========================================
+    # VÉRIFICATIONS D'AUTHENTIFICATION
+    # ========================================
+    if not user_email:
+        print("ERREUR: Aucun email utilisateur trouvé")
+        return redirect('login_form')
+    
+    user = users.find_one({'email': user_email})
+    print(f"Utilisateur trouvé: {user}")
+    
+    if user and user.get('role') != 'admin':
+        print(f"ERREUR: Rôle utilisateur incorrect: {user.get('role')}")
+        return redirect('authapp:home')
+    
+    # ========================================
+    # VALIDATION DU FICHIER
+    # ========================================
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file:
+        print("ERREUR: Aucun fichier CSV fourni")
+        return render(request, 'csv_anonymizer/upload.html', {'error': 'Aucun fichier sélectionné'})
+    
+    print(f"Fichier reçu: {csv_file.name}, taille: {csv_file.size} bytes")
+    
+    if not csv_file.name.endswith('.csv'):
+        print(f"ERREUR: Format de fichier incorrect: {csv_file.name}")
+        return render(request, 'csv_anonymizer/upload.html', {'error': 'Le fichier doit être au format CSV'})
+    
+    # ========================================
+    # TRAITEMENT PAR STREAMING
+    # ========================================
+    print("Début traitement par streaming...")
+    content_bytes = b''
+    chunk_count = 0
+    
+    for chunk in csv_file.chunks():
+        content_bytes += chunk
+        chunk_count += 1
+    
+    print(f"Streaming terminé: {chunk_count} chunks traités")
+    
+    # ========================================
+    # DÉCODAGE MULTI-ENCODAGE
+    # ========================================
+    encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']
+    content = None
+    
+    for encoding in encodings:
+        try:
+            content = content_bytes.decode(encoding)
+            print(f"Décodage réussi avec: {encoding}")
+            break
+        except UnicodeDecodeError:
+            continue
+    
+    if content is None:
+        content = content_bytes.decode('utf-8', errors='replace')
+        print("ATTENTION: Décodage avec remplacement de caractères invalides")
+    
+    print(f"Contenu total: {len(content)} caractères")
+    
+    # ========================================
+    # PARSING CSV ET EXTRACTION HEADERS
+    # ========================================
+    reader = csv.reader(io.StringIO(content))
+    headers = next(reader)
+    print(f"Headers détectés: {headers}")
+    
+    # ========================================
+    # STOCKAGE GRIDFS
+    # ========================================
+    print("Stockage GridFS...")
+    try:
+        file_id = fs.put(
+            io.BytesIO(content.encode('utf-8')),
+            filename=csv_file.name,
+            content_type='text/csv',
+            upload_date=datetime.datetime.now()
+        )
+        print(f"Fichier stocké dans GridFS avec ID: {file_id}")
+    except Exception as e:
+        print(f"ERREUR GridFS: {e}")
+        return render(request, 'csv_anonymizer/upload.html', {'error': f'Erreur de stockage: {e}'})
+    
+    # ========================================
+    # RÉCUPÉRATION DATA STEWARDS
+    # ========================================
+    print("Récupération des data stewards...")
+    data_stewards = list(users.find({'role': 'user'}))
+    authorized_emails = [ds['email'] for ds in data_stewards]
+    print(f"Data stewards trouvés: {len(data_stewards)}, emails: {authorized_emails}")
+    
+    # ========================================
+    # CRÉATION DU JOB
+    # ========================================
+    print("Création du job...")
+    job_data = {
+        'user_email': request.session.get('user_email'),
+        'original_filename': csv_file.name,
+        'gridfs_file_id': file_id,
+        'upload_date': datetime.datetime.now(),
+        'status': 'pending',
+        'shared_with_data_stewards': True,
+        'authorized_users': authorized_emails
+    }
+    
+    try:
+        result = main_db.anonymization_jobs.insert_one(job_data)
+        job_id = result.inserted_id
+        print(f"Job créé avec ID: {job_id}")
+    except Exception as e:
+        print(f"ERREUR création job: {e}")
+        return render(request, 'csv_anonymizer/upload.html', {'error': f'Erreur de création du job: {e}'})
+    
+    # ========================================
+    # CHARGEMENT COMPLET DES DONNÉES
+    # ========================================
+    print("🔄 Chargement COMPLET du dataset pour analyse qualité...")
+    reader = csv.reader(io.StringIO(content))
+    headers = next(reader)  # Skip headers again
+    
+    all_rows = []
+    for row in reader:
+        if len(row) == len(headers):  # Vérifier cohérence
+            row_dict = {headers[i]: row[i] for i in range(len(headers))}
+            all_rows.append(row_dict)
+    
+    print(f"✅ Dataset chargé: {len(all_rows)} lignes")
+    
+    # ========================================
+    # ANALYSE DE QUALITÉ COMPLÈTE (NOUVEAU)
+    # ========================================
+    print("🔍 Début analyse de qualité...")
+    try:
         
-    if not user_email:    
-        print("ERREUR: Aucun email utilisateur trouvé")    
-        return redirect('login_form')    
+        quality_analyzer = DataQualityAnalyzer()
+        quality_report = quality_analyzer.analyze_full_dataset(headers, all_rows)
         
-    user = users.find_one({'email': user_email})    
-    print(f"Utilisateur trouvé: {user}")    
+        # Sauvegarder le rapport de qualité dans MongoDB
+        print("💾 Sauvegarde du rapport de qualité...")
+        main_db.quality_reports.update_one(
+            {'job_id': str(job_id)},
+            {
+                '$set': {
+                    'job_id': str(job_id),
+                    'report': quality_report,
+                    'created_at': datetime.datetime.now()
+                }
+            },
+            upsert=True
+        )
         
-    if user and user.get('role') != 'admin':    
-        print(f"ERREUR: Rôle utilisateur incorrect: {user.get('role')}")    
-        return redirect('authapp:home')    
+        print(f"""
+        📊 RAPPORT DE QUALITÉ:
+        - Score global: {quality_report['quality_score']}/10
+        - Valeurs manquantes: {quality_report['missing_values']['total_missing']} ({quality_report['missing_values']['missing_percentage']}%)
+        - Doublons: {quality_report['duplicates']['total_duplicates']} ({quality_report['duplicates']['duplicate_percentage']}%)
+        - Incohérences: {quality_report['inconsistencies']['total_inconsistencies']}
+        - Problèmes critiques: {len(quality_report['critical_issues'])}
+        """)
         
-    csv_file = request.FILES.get('csv_file')    
-    if not csv_file:    
-        print("ERREUR: Aucun fichier CSV fourni")    
-        return render(request, 'csv_anonymizer/upload.html', {'error': 'Aucun fichier sélectionné'})    
+        # Afficher les problèmes critiques
+        if quality_report['critical_issues']:
+            print("\n⚠️ PROBLÈMES CRITIQUES DÉTECTÉS:")
+            for issue in quality_report['critical_issues']:
+                print(f"  - [{issue['severity']}] {issue['message']}")
+                print(f"    Action: {issue['action']}")
+    
+    except Exception as e:
+        print(f"⚠️ ERREUR analyse qualité: {e}")
+        import traceback
+        traceback.print_exc()
+        # Créer un rapport par défaut en cas d'erreur
+        quality_report = {
+            'quality_score': 5.0,
+            'missing_values': {'total_missing': 0, 'missing_percentage': 0.0},
+            'duplicates': {'total_duplicates': 0, 'duplicate_percentage': 0.0},
+            'inconsistencies': {'total_inconsistencies': 0},
+            'critical_issues': []
+        }
+    
+    # ========================================
+    # ANALYSE DES ENTITÉS SENSIBLES
+    # ========================================
+    print("\n🔍 Analyse des entités sensibles (échantillon de 50 lignes)...")
+    sample_rows = all_rows[:50]  # Augmenté à 50 pour meilleure détection
+    
+    try:
+        analyzer = create_enhanced_analyzer_engine("moroccan_entities_model_v2")
+        semantic_analyzer = SemanticAnalyzer("moroccan_entities_model_v2")
+        auto_tagger = IntelligentAutoTagger(analyzer, semantic_analyzer)
+        print("Analyseurs initialisés avec succès")
+    except Exception as e:
+        print(f"ERREUR initialisation analyseurs: {e}")
+        return render(request, 'csv_anonymizer/upload.html', {'error': f'Erreur d\'initialisation: {e}'})
+    
+    detected_entities = set()
+    entity_count = 0
+    
+    for row_idx, row in enumerate(sample_rows):
+        if row_idx % 10 == 0:
+            print(f"Analyse ligne {row_idx + 1}/{len(sample_rows)}")
         
-    print(f"Fichier reçu: {csv_file.name}, taille: {csv_file.size} bytes")    
-        
-    if not csv_file.name.endswith('.csv'):    
-        print(f"ERREUR: Format de fichier incorrect: {csv_file.name}")    
-        return render(request, 'csv_anonymizer/upload.html', {'error': 'Le fichier doit être au format CSV'})    
-        
-    # Traitement par streaming    
-    print("Début traitement par streaming...")    
-    content_chunks = []    
-    chunk_count = 0    
-        
-    for chunk in csv_file.chunks():    
-        content_chunks.append(chunk.decode('utf-8'))    
-        chunk_count += 1    
-        
-    print(f"Streaming terminé: {chunk_count} chunks traités")    
-        
-    content = ''.join(content_chunks)    
-    print(f"Contenu total: {len(content)} caractères")    
-        
-    reader = csv.reader(io.StringIO(content))    
-    headers = next(reader)    
-    print(f"Headers détectés: {headers}")    
-        
-    # Stocker le fichier avec GridFS    
-    print("Stockage GridFS...")    
-    try:    
-        file_id = fs.put(    
-            io.BytesIO(content.encode('utf-8')),    
-            filename=csv_file.name,    
-            content_type='text/csv',    
-            upload_date=datetime.datetime.now()    
-        )    
-        print(f"Fichier stocké dans GridFS avec ID: {file_id}")    
-    except Exception as e:    
-        print(f"ERREUR GridFS: {e}")    
-        return render(request, 'csv_anonymizer/upload.html', {'error': f'Erreur de stockage: {e}'})    
-        
-    # Récupérer tous les data stewards    
-    print("Récupération des data stewards...")    
-    data_stewards = list(users.find({'role': 'user'}))    
-    authorized_emails = [ds['email'] for ds in data_stewards]    
-    print(f"Data stewards trouvés: {len(data_stewards)}, emails: {authorized_emails}")    
-        
-    # Créer le job    
-    print("Création du job...")    
-    job_data = {    
-        'user_email': request.session.get('user_email'),    
-        'original_filename': csv_file.name,    
-        'gridfs_file_id': file_id,    
-        'upload_date': datetime.datetime.now(),    
-        'status': 'pending',    
-        'shared_with_data_stewards': True,    
-        'authorized_users': authorized_emails    
-    }    
-        
-    try:    
-        result = main_db.anonymization_jobs.insert_one(job_data)    
-        job_id = result.inserted_id    
-        print(f"Job créé avec ID: {job_id}")    
-    except Exception as e:    
-        print(f"ERREUR création job: {e}")    
-        return render(request, 'csv_anonymizer/upload.html', {'error': f'Erreur de création du job: {e}'})    
-        
-    # Échantillonnage : analyser seulement 10 lignes    
-    print("Début échantillonnage (10 lignes)...")    
-    sample_rows = []    
-    row_count = 0    
-        
-    for i, row in enumerate(reader):    
-        if i >= 10:    
-            break    
-        row_data = {}    
-        for j, header in enumerate(headers):    
-            if j < len(row):    
-                row_data[header] = row[j]    
-        sample_rows.append(row_data)    
-        row_count += 1    
-        
-    print(f"Échantillonnage terminé: {row_count} lignes analysées")    
-    print(f"Exemple de données: {sample_rows[0] if sample_rows else 'Aucune donnée'}")    
-        
-    # Analyser seulement l'échantillon    
-    print("Début analyse des entités...")    
-    try:    
-        analyzer = create_enhanced_analyzer_engine("moroccan_entities_model_v2")    
-        semantic_analyzer = SemanticAnalyzer("moroccan_entities_model_v2")    
-        auto_tagger = IntelligentAutoTagger(analyzer, semantic_analyzer)    
-        print("Analyseurs initialisés avec succès")    
-    except Exception as e:    
-        print(f"ERREUR initialisation analyseurs: {e}")    
-        return render(request, 'csv_anonymizer/upload.html', {'error': f'Erreur d\'initialisation: {e}'})    
-        
-    detected_entities = set()    
-    entity_count = 0    
-        
-    for row_idx, row in enumerate(sample_rows):    
-        print(f"Analyse ligne {row_idx + 1}/{len(sample_rows)}")    
-        for header, value in row.items():    
-            if isinstance(value, str) and value.strip():    
-                try:    
-                    entities, tags = auto_tagger.analyze_and_tag(value, dataset_name=csv_file.name)    
-                    for entity in entities:    
-                        if entity.entity_type not in EXCLUDED_ENTITY_TYPES:    
-                            detected_entities.add(entity.entity_type)    
-                            entity_count += 1    
-                except Exception as e:    
-                    print(f"ERREUR analyse entité '{value}': {e}")    
-        
-    print(f"Analyse terminée: {entity_count} entités trouvées")    
-    print(f"Types d'entités détectées: {list(detected_entities)}")    
-        
-    # Sauvegarder tout le fichier en chunks    
-    print("Début sauvegarde en chunks...")    
-    reader = csv.reader(io.StringIO(content))  # Re-créer le reader    
-    headers = next(reader)  # Skip headers again    
-        
-    # Sauvegarder toutes les données en chunks    
-    chunk_size = 1000    
-    chunk_number = 0    
-    current_chunk = []    
-    total_rows = 0    
-        
-    for row in reader:    
-        current_chunk.append(row)    
-        total_rows += 1    
-            
-        if len(current_chunk) >= chunk_size:    
-            try:    
-                self._save_chunk(job_id, chunk_number, headers, current_chunk)    
-                print(f"Chunk {chunk_number} sauvegardé: {len(current_chunk)} lignes")    
-                current_chunk = []    
-                chunk_number += 1    
-            except Exception as e:    
-                print(f"ERREUR sauvegarde chunk {chunk_number}: {e}")    
-        
-    # Sauvegarder le dernier chunk    
-    if current_chunk:    
-        try:    
-            self._save_chunk(job_id, chunk_number, headers, current_chunk)    
-            print(f"Dernier chunk {chunk_number} sauvegardé: {len(current_chunk)} lignes")    
-        except Exception as e:    
-            print(f"ERREUR sauvegarde dernier chunk: {e}")    
-        
-    print(f"Sauvegarde chunks terminée: {chunk_number + 1} chunks, {total_rows} lignes totales")    
-        
-    # GÉNÉRATION RECOMMANDATIONS SYNCHRONE INTÉGRÉE
-    print("=== DÉBUT GÉNÉRATION RECOMMANDATIONS SYNCHRONE ===")
+        for header, value in row.items():
+            if isinstance(value, str) and value.strip():
+                try:
+                    entities, tags = auto_tagger.analyze_and_tag(value, dataset_name=csv_file.name)
+                    for entity in entities:
+                        if entity.entity_type not in EXCLUDED_ENTITY_TYPES:
+                            detected_entities.add(entity.entity_type)
+                            entity_count += 1
+                except Exception as e:
+                    pass  # Continuer même en cas d'erreur
+    
+    print(f"✅ Analyse entités terminée: {entity_count} entités trouvées")
+    print(f"Types d'entités détectées: {list(detected_entities)}")
+    
+    # ========================================
+    # SAUVEGARDE EN CHUNKS
+    # ========================================
+    print("\n💾 Début sauvegarde en chunks...")
+    chunk_size = 1000
+    chunk_number = 0
+    
+    for i in range(0, len(all_rows), chunk_size):
+        chunk_data = all_rows[i:i + chunk_size]
+        # Convertir dictionnaires en listes pour _save_chunk
+        chunk_as_lists = [[row[h] if h in row else '' for h in headers] for row in chunk_data]
+        self._save_chunk(job_id, chunk_number, headers, chunk_as_lists)
+        print(f"Chunk {chunk_number} sauvegardé: {len(chunk_data)} lignes")
+        chunk_number += 1
+    
+    print(f"✅ Sauvegarde chunks terminée: {chunk_number} chunks, {len(all_rows)} lignes totales")
+    
+    # ========================================
+    # GÉNÉRATION RECOMMANDATIONS IA
+    # ========================================
+    print("\n🤖 === DÉBUT GÉNÉRATION RECOMMANDATIONS IA ===")
     has_recommendations = False
     
     try:
@@ -305,29 +382,28 @@ class UploadCSVView(View):
         recommendations_by_category = {}
         
         print("Mode SMART: Génération sans Gemini (quota épuisé)...")
-
+        
         for category in enterprise_engine.categories:
-         print(f"Génération SMART pour {category}...")
-         try:
-        # Essayer d'abord avec vos templates (si quota disponible)
-          recs = self._generate_category_recommendations_sync_optimized(
-            enterprise_engine, 
-            sync_client, 
-            dataset_profile, 
-            category
-          )
-         except Exception as e:
-          print(f"Fallback SMART pour {category}: {e}")
-        # Utiliser la génération intelligente sans Gemini
-          recs = self._generate_smart_recommendations_without_gemini(
-            enterprise_engine,
-            dataset_profile, 
-            category
-          )
-    
-         recommendations_by_category[category] = recs
-         print(f"Recommandations {category}: {len(recs)} générées")
-       
+            print(f"Génération SMART pour {category}...")
+            try:
+                # Essayer d'abord avec vos templates (si quota disponible)
+                recs = self._generate_category_recommendations_sync_optimized(
+                    enterprise_engine, 
+                    sync_client, 
+                    dataset_profile, 
+                    category
+                )
+            except Exception as e:
+                print(f"Fallback SMART pour {category}: {e}")
+                # Utiliser la génération intelligente sans Gemini
+                recs = self._generate_smart_recommendations_without_gemini(
+                    enterprise_engine,
+                    dataset_profile, 
+                    category
+                )
+            
+            recommendations_by_category[category] = recs
+            print(f"Recommandations {category}: {len(recs)} générées")
         
         # Formater le résultat final
         comprehensive_recommendations = enterprise_engine._format_enterprise_output(recommendations_by_category)
@@ -347,34 +423,40 @@ class UploadCSVView(View):
         
         has_recommendations = len(comprehensive_recommendations['recommendations']) > 0
         print(f"Recommandations sauvegardées: {len(comprehensive_recommendations['recommendations'])}")
-        
+    
     except Exception as e:
         print(f"ERREUR génération recommandations: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
         has_recommendations = False
     
-    print(f"=== FIN GÉNÉRATION: {has_recommendations} ===")
+    print(f"=== FIN GÉNÉRATION RECOMMANDATIONS: {has_recommendations} ===")
     
-    # Sauvegarder le job_id dans la session
+    # ========================================
+    # SAUVEGARDE SESSION
+    # ========================================
     request.session['current_job_id'] = str(job_id)
-    print(f"Job ID sauvegardé: {str(job_id)}")
+    print(f"Job ID sauvegardé dans session: {str(job_id)}")
     
-    # Rendu final
-    print(f"=== RÉSULTAT FINAL ===")
+    # ========================================
+    # RENDU FINAL
+    # ========================================
+    print(f"\n✅ === UPLOAD TERMINÉ AVEC SUCCÈS ===")
     print(f"Job ID: {job_id}")
+    print(f"Score qualité: {quality_report['quality_score']}/10")
     print(f"Entités détectées: {len(detected_entities)} types")
     print(f"Headers: {len(headers)} colonnes")
-    print(f"has_recommendations: {has_recommendations}")
+    print(f"Total lignes: {len(all_rows)}")
+    print(f"Recommandations: {has_recommendations}")
     
     return render(request, 'csv_anonymizer/select_entities.html', {
         'job_id': str(job_id),
         'detected_entities': list(detected_entities),
         'headers': headers,
-        'has_recommendations': has_recommendations
+        'has_recommendations': has_recommendations,
+        'quality_report': quality_report,  # NOUVEAU: rapport de qualité complet
+        'has_quality_issues': quality_report['quality_score'] < 7.0  # NOUVEAU: indicateur problèmes
     })
-
-
  def _generate_category_recommendations_sync_optimized(self, enterprise_engine, sync_client, dataset_profile, category):  
     """Version optimisée de génération par catégorie"""  
       
@@ -705,184 +787,259 @@ class UploadCSVView(View):
         if first_chunk and first_chunk['data']:  
             return first_chunk['data'][:10]  # Limiter à 10 lignes comme dans l'original  
         return []
+
+class DownloadCleanedFileView(View):
+    def get(self, request, job_id):
+        """Télécharge le fichier nettoyé"""
+        if not request.session.get("user_email"):
+            return JsonResponse({'error': 'Non autorisé'}, status=401)
+        
+        # Récupérer les chunks nettoyés
+        chunks = list(csv_db['csv_chunks'].find({'job_id': str(job_id)}).sort('chunk_number', 1))
+        if not chunks:
+            return JsonResponse({'error': 'Données non trouvées'}, status=404)
+        
+        headers = chunks[0]['headers']
+        all_data = []
+        for chunk in chunks:
+            all_data.extend(chunk['data'])
+        
+        # Générer le CSV
+        df = pd.DataFrame(all_data)
+        output = io.StringIO()
+        df.to_csv(output, index=False)
+        
+        # Récupérer le nom original
+        job = main_db.anonymization_jobs.find_one({'_id': ObjectId(job_id)})
+        original_filename = job['original_filename'] if job else 'file.csv'
+        
+        # Créer la réponse HTTP
+        csv_content = output.getvalue()
+        response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="cleaned_{original_filename}"'
+        
+        return response
+
+import re
+
 class ProcessCSVView(View):  
     def post(self, request, job_id):  
-     # Vérifications d'authentification existantes  
-     if not request.session.get("user_email"):  
-        return redirect('login_form')  
-      
-     user_email = request.session.get("user_email")  
-     user = users.find_one({'email': user_email})  
-      
-     if user and user.get('role') != 'admin':  
-        return redirect('authapp:home')  
-      
-    # Convertir le string job_id en ObjectId MongoDB si nécessaire  
-     try:  
-        if len(job_id) == 24:  # ObjectId standard length  
-            object_id = ObjectId(job_id)  
-        else:  
-            object_id = job_id  
-     except:  
-        return JsonResponse({'error': 'ID invalide'}, status=400)  
-      
-    # Récupérer les entités sélectionnées  
-     selected_entities = request.POST.getlist('entities')  
-      
-    # Récupérer les données depuis les chunks  
-     chunks = list(csv_db['csv_chunks'].find({'job_id': str(object_id)}).sort('chunk_number', 1))  
-     if not chunks:  
-        return JsonResponse({'error': 'Données non trouvées'}, status=404)  
-      
-     headers = chunks[0]['headers']  
-      
-    # Combiner toutes les données  
-     all_data = []  
-     for chunk in chunks:  
-        all_data.extend(chunk['data'])  
-      
-     df = pd.DataFrame(all_data)  
-      
-    # NOUVELLE APPROCHE : Analyser les colonnes une seule fois  
-     analyzer = create_enhanced_analyzer_engine("moroccan_entities_model_v2")  
-     semantic_analyzer = SemanticAnalyzer("moroccan_entities_model_v2")  
-     auto_tagger = IntelligentAutoTagger(analyzer, semantic_analyzer)  
-      
-     job = main_db.anonymization_jobs.find_one({'_id': object_id})  
-     original_filename = job['original_filename'] if job else 'file.csv'  
-      
-    # Analyser les headers pour identifier les colonnes sensibles  
-     sensitive_columns = {}  
-     for header in headers:  
-        if header in df.columns:  
-            column_data = df[header].dropna().astype(str).tolist()  
-            if column_data:  # Si la colonne a des données  
-                entities = self._analyze_column_sample(header, column_data, auto_tagger, original_filename)  
-                if entities:  
-                    # Filtrer seulement les entités sélectionnées par l'utilisateur  
-                    filtered_entities = entities.intersection(set(selected_entities))  
-                    if filtered_entities:  
-                        sensitive_columns[header] = filtered_entities  
-      
-    # Anonymiser seulement les colonnes identifiées comme sensibles  
-     output_df = df.copy()  
-     anonymizer = AnonymizerEngine()  
-      
-     for column, column_entities in sensitive_columns.items():  
-        for index, value in df[column].items():  
-            if isinstance(value, str) and value.strip():  
-                # Analyser cette valeur spécifique pour obtenir les positions exactes  
-                entities, tags = auto_tagger.analyze_and_tag(value, dataset_name=original_filename)  
-                  
-                results = []  
-                for entity in entities:  
-                    if entity.entity_type in column_entities:  
-                        result = RecognizerResult(  
-                            entity_type=entity.entity_type,  
-                            start=entity.start_pos,  
-                            end=entity.end_pos,  
-                            score=entity.confidence_score  
-                        )  
-                        results.append(result)  
-                  
-                if results:  
-                    anonymizers = {entity_type: OperatorConfig("replace", {"new_value": "[MASQUÉ]"})  
-                                  for entity_type in column_entities}  
-                      
-                    anonymized_text = anonymizer.anonymize(  
-                        text=value,  
-                        analyzer_results=results,  
-                        operators=anonymizers  
-                    ).text  
-                      
-                    output_df.at[index, column] = anonymized_text  
-      
-    # Mettre à jour le statut du job  
-     main_db.anonymization_jobs.update_one(  
-        {'_id': object_id},  
-        {'$set': {'status': 'completed'}}  
-     )  
-      
-    # Préparer le fichier CSV à télécharger  
-     output = io.StringIO()  
-     output_df.to_csv(output, index=False)  
-      
-    # Créer la réponse HTTP avec le fichier CSV  
-     response = HttpResponse(output.getvalue(), content_type='text/csv')  
-     response['Content-Disposition'] = f'attachment; filename="anonymized_{original_filename}"'  
-      
-    # Sauvegarder les données anonymisées pour les utilisateurs  
-     anonymized_collection = csv_db['anonymized_files']  
-     anonymized_collection.insert_one({  
-        'job_id': str(object_id),  
-        'original_filename': original_filename,  
-        'anonymized_data': output_df.to_dict('records'),  
-        'headers': list(output_df.columns),  
-        'anonymized_date': datetime.datetime.now()  
-     })  
-      
-     return response  
+        # Vérifications d'authentification existantes  
+        if not request.session.get("user_email"):  
+            return redirect('login_form')  
+          
+        user_email = request.session.get("user_email")  
+        user = users.find_one({'email': user_email})  
+          
+        if user and user.get('role') != 'admin':  
+            return redirect('authapp:home')  
+          
+        # Convertir le string job_id en ObjectId MongoDB  
+        try:  
+            if len(job_id) == 24:  
+                object_id = ObjectId(job_id)  
+            else:  
+                object_id = job_id  
+        except:  
+            return JsonResponse({'error': 'ID invalide'}, status=400)  
+          
+        # Récupérer les entités sélectionnées  
+        selected_entities = request.POST.getlist('entities')  
+        
+        print(f"=== DÉBUT ANONYMISATION ULTRA-RAPIDE (VECTORISATION) ===")
+        print(f"Job ID: {job_id}")
+        print(f"Entités sélectionnées: {selected_entities}")
+        
+        # 1. Récupérer tous les chunks
+        chunks = list(csv_db['csv_chunks'].find({'job_id': str(object_id)}).sort('chunk_number', 1))
+        if not chunks:  
+            return JsonResponse({'error': 'Données non trouvées'}, status=404)  
+          
+        headers = chunks[0]['headers']  
+        
+        # 2. Combiner toutes les données
+        print("Chargement des données...")
+        all_data = []  
+        for chunk in chunks:  
+            all_data.extend(chunk['data'])  
+        
+        df = pd.DataFrame(all_data)
+        print(f"Dataset: {len(df)} lignes, {len(df.columns)} colonnes")
+        
+        # 3. MASQUAGE ULTRA-RAPIDE PAR REGEX VECTORISÉ (sans multiprocessing)
+        # Patterns regex optimisés
+        patterns = {
+            'EMAIL_ADDRESS': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+            'PHONE_NUMBER': r'\b(\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{2,4}[-.\s]?\d{2,4}\b',
+            'IBAN_CODE': r'\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b',
+            'CREDIT_CARD': r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b',
+            'ID_MAROC': r'\b[A-Z]{1,2}\d{5,8}\b',
+            'IP_ADDRESS': r'\b(?:\d{1,3}\.){3}\d{1,3}\b',
+            'URL': r'https?://[^\s]+',
+        }
+        
+        # Masques de remplacement
+        replacements = {
+            'EMAIL_ADDRESS': '[EMAIL_MASQUÉ]',
+            'PHONE_NUMBER': '[TÉLÉPHONE_MASQUÉ]',
+            'IBAN_CODE': '[IBAN_MASQUÉ]',
+            'CREDIT_CARD': '[CARTE_MASQUÉE]',
+            'ID_MAROC': '[CIN_MASQUÉE]',
+            'IP_ADDRESS': '[IP_MASQUÉE]',
+            'URL': '[URL_MASQUÉE]',
+            'PERSON': '[NOM_MASQUÉ]',
+            'LOCATION': '[LIEU_MASQUÉ]',
+            'DATE_TIME': '[DATE_MASQUÉE]',
+        }
+        
+        # Identifier les colonnes à traiter intelligemment
+        columns_to_process = self._identify_columns_to_mask(df, selected_entities, headers)
+        
+        print(f"Colonnes à anonymiser: {list(columns_to_process.keys())}")
+        print("Début masquage vectorisé...")
+        
+        # 4. TRAITEMENT VECTORISÉ (ULTRA-RAPIDE)
+        output_df = df.copy()
+        
+        for column, entity_types in columns_to_process.items():
+            if column not in output_df.columns:
+                continue
+            
+            print(f"Masquage '{column}' ({len(entity_types)} types)...")
+            
+            # Convertir en string pour traitement
+            col_series = output_df[column].astype(str)
+            
+            # Appliquer les masques pour chaque type d'entité
+            for entity_type in entity_types:
+                if entity_type in patterns:
+                    # REGEX VECTORISÉ avec pandas (TRÈS RAPIDE)
+                    pattern = patterns[entity_type]
+                    mask = replacements[entity_type]
+                    col_series = col_series.str.replace(pattern, mask, regex=True)
+                    
+                elif entity_type in ['PERSON', 'LOCATION', 'DATE_TIME']:
+                    # Masquage simple vectorisé
+                    mask = replacements[entity_type]
+                    # Remplacer seulement les valeurs non-vides
+                    col_series = col_series.apply(
+                        lambda x: mask if x and str(x).strip() and str(x) != 'nan' else x
+                    )
+            
+            output_df[column] = col_series
+        
+        print("✅ Anonymisation terminée")
+        
+        # 5. Mettre à jour le statut du job
+        main_db.anonymization_jobs.update_one(  
+            {'_id': object_id},  
+            {'$set': {'status': 'completed'}}  
+        )  
+        
+        # 6. Générer le CSV optimisé
+        print("Génération du fichier CSV...")
+        output = io.StringIO()  
+        output_df.to_csv(output, index=False)
+        
+        job = main_db.anonymization_jobs.find_one({'_id': object_id})
+        original_filename = job['original_filename'] if job else 'file.csv'
+        
+        # 7. Créer la réponse HTTP
+        csv_content = output.getvalue()
+        response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8')  
+        response['Content-Disposition'] = f'attachment; filename="anonymized_{original_filename}"'
+        
+        print(f"=== FIN ANONYMISATION - Fichier prêt ({len(csv_content)} bytes) ===")
+        
+        return response
     
-    def _process_chunk_anonymization(self, df_chunk, selected_entities, auto_tagger, anonymizer, original_filename):  
-        """Traite l'anonymisation d'un chunk de données"""  
-        output_df = df_chunk.copy()  
-          
-        # Pour chaque colonne du DataFrame chunk  
-        for column in df_chunk.columns:  
-            # Pour chaque ligne dans cette colonne  
-            for index, value in df_chunk[column].items():  
-                # Vérifier si la valeur est une chaîne avant de l'analyser  
-                if isinstance(value, str):  
-                    entities, tags = auto_tagger.analyze_and_tag(value, dataset_name=original_filename)  
-                      
-                    # Convertir les EntityMetadata en format Presidio pour l'anonymisation  
-                    results = []  
-                    for entity in entities:  
-                        if entity.entity_type not in EXCLUDED_ENTITY_TYPES and entity.entity_type in selected_entities:  
-                            # Créer un objet compatible avec Presidio  
-                            result = RecognizerResult(  
-                                entity_type=entity.entity_type,  
-                                start=entity.start_pos,  
-                                end=entity.end_pos,  
-                                score=entity.confidence_score  
-                            )  
-                            results.append(result)  
-                      
-                    # Si des entités à anonymiser ont été trouvées  
-                    if results:  
-                        # Configurer l'anonymisation pour remplacer les valeurs  
-                        anonymizers = {entity_type: OperatorConfig("replace", {"new_value": "[MASQUÉ]"})  
-                                      for entity_type in selected_entities}  
-                          
-                        # Anonymiser le texte  
-                        anonymized_text = anonymizer.anonymize(  
-                            text=value,  
-                            analyzer_results=results,  
-                            operators=anonymizers  
-                        ).text  
-                          
-                        # Remplacer la valeur dans le DataFrame de sortie  
-                        output_df.at[index, column] = anonymized_text  
-          
-        return output_df
+    def _identify_columns_to_mask(self, df, selected_entities, headers):
+        """
+        Identifie intelligemment les colonnes à masquer basé sur :
+        1. Les noms de colonnes (ultra-rapide)
+        2. Un échantillonnage rapide si nécessaire
+        """
+        columns_to_process = {}
+        
+        # Mots-clés pour identifier les colonnes rapidement
+        keywords_map = {
+            'EMAIL_ADDRESS': ['email', 'mail', 'e-mail', 'courriel'],
+            'PHONE_NUMBER': ['phone', 'tel', 'telephone', 'mobile', 'gsm', 'portable'],
+            'PERSON': ['nom', 'prenom', 'name', 'firstname', 'lastname', 'prénom', 'client', 'user'],
+            'IBAN_CODE': ['iban', 'compte', 'account', 'rib', 'bank'],
+            'CREDIT_CARD': ['carte', 'card', 'cb', 'credit', 'visa', 'mastercard'],
+            'ID_MAROC': ['cin', 'id', 'identité', 'identity', 'cni'],
+            'LOCATION': ['ville', 'city', 'adresse', 'address', 'lieu', 'location', 'pays', 'country'],
+            'DATE_TIME': ['date', 'time', 'datetime', 'heure', 'timestamp', 'created', 'updated'],
+            'IP_ADDRESS': ['ip', 'adresse_ip', 'ip_address'],
+            'URL': ['url', 'site', 'website', 'lien', 'link'],
+        }
+        
+        # Méthode 1 : Identification par nom de colonne (99% des cas)
+        for entity_type in selected_entities:
+            if entity_type in keywords_map:
+                keywords = keywords_map[entity_type]
+                
+                # Chercher les colonnes correspondantes
+                for col in headers:
+                    col_lower = col.lower()
+                    if any(kw in col_lower for kw in keywords):
+                        if col not in columns_to_process:
+                            columns_to_process[col] = set()
+                        columns_to_process[col].add(entity_type)
+                        print(f"✓ Colonne '{col}' identifiée pour {entity_type}")
+        
+        # Méthode 2 : Si aucune colonne trouvée par nom, échantillonner SEULEMENT 3 lignes
+        if not columns_to_process:
+            print("⚠️ Aucune colonne identifiée par nom - échantillonnage minimal (3 lignes)...")
+            
+            # Prendre seulement 3 lignes aléatoires pour test
+            sample_df = df.sample(n=min(3, len(df)))
+            
+            for col in df.columns:
+                if col not in columns_to_process:
+                    sample_values = sample_df[col].dropna().astype(str).tolist()
+                    
+                    for entity_type in selected_entities:
+                        if self._quick_check_entity(sample_values, entity_type):
+                            if col not in columns_to_process:
+                                columns_to_process[col] = set()
+                            columns_to_process[col].add(entity_type)
+                            print(f"✓ Colonne '{col}' détectée par échantillon pour {entity_type}")
+        
+        # Méthode 3 : Si toujours rien, appliquer sur TOUTES les colonnes texte (sécurité)
+        if not columns_to_process:
+            print("⚠️ Mode sécurité : application sur toutes colonnes texte")
+            for col in df.select_dtypes(include=['object']).columns:
+                columns_to_process[col] = set(selected_entities)
+        
+        return columns_to_process
+    
+    def _quick_check_entity(self, sample_values, entity_type):
+        """Vérification rapide si un type d'entité est présent dans l'échantillon"""
+        if not sample_values:
+            return False
+        
+        # Patterns de détection rapide
+        quick_patterns = {
+            'EMAIL_ADDRESS': r'@',
+            'PHONE_NUMBER': r'\d{4,}',
+            'IBAN_CODE': r'[A-Z]{2}\d{2}',
+            'CREDIT_CARD': r'\d{4}.*\d{4}',
+            'IP_ADDRESS': r'\d+\.\d+\.\d+\.\d+',
+            'URL': r'https?://',
+        }
+        
+        if entity_type in quick_patterns:
+            pattern = quick_patterns[entity_type]
+            for val in sample_values:
+                if re.search(pattern, str(val)):
+                    return True
+        
+        # Pour PERSON, LOCATION, DATE_TIME : toujours retourner False
+        # car ils seront détectés par nom de colonne
+        return False
 
-    def _analyze_column_sample(self, header, column_data, auto_tagger, original_filename):  
-     """Analyse un échantillon de données d'une colonne pour identifier les entités"""  
-     detected_entities = set()  
-      
-    # Prendre un échantillon de 10-20 valeurs de la colonne  
-     sample_size = min(20, len(column_data))  
-     sample_values = column_data[:sample_size]  
-       
-     for value in sample_values:  
-        if isinstance(value, str) and value.strip():  
-            entities, tags = auto_tagger.analyze_and_tag(value, dataset_name=original_filename)  
-            for entity in entities:  
-                if entity.entity_type not in EXCLUDED_ENTITY_TYPES:  
-                    detected_entities.add(entity.entity_type)  
-      
-     return detected_entities
-      
 class StatisticsView(View):      
     def get(self, request):      
         if not request.session.get("user_email"):      
