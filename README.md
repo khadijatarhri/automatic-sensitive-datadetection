@@ -83,10 +83,11 @@ Le système implémente un workflow en **quatre étapes principales** :
 
 ## 🚀 Installation et Déploiement
 
-### 1️⃣ Cloner le dépôt principal
+### 1️⃣ Cloner le dépôt principal , construire l’image Docker et lancer l’application
 ```bash
 git clone https://github.com/khadijatarhri/Automatic-detection-of-sensitive-data-recommendation-engine-for-metadata-govnance.git
-cd Automatic-detection-of-sensitive-data-recommendation-engine-for-metadata-govnance.git
+cd Automatic-detection-of-sensitive-data-recommendation-engine-for-metadata-govnance
+docker-compose up --build
 ```
 ### Créer l'utilisateur administrateur  
 Dans un nouveau terminal, exécutez :
